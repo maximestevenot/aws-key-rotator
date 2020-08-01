@@ -4,7 +4,7 @@ use anyhow::{Context, Result};
 use inflector::Inflector;
 use rusoto_core::Region;
 use rusoto_core::request::HttpClient;
-use rusoto_iam::{Iam, IamClient};
+use rusoto_iam::{CreateAccessKeyRequest, DeleteAccessKeyRequest, Iam, IamClient, ListAccessKeysRequest, UpdateAccessKeyRequest};
 
 use crate::aws::{config, connection};
 
@@ -22,27 +22,63 @@ async fn get_answer(prompt: &str) -> Result<String> {
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    const INACTIVE: &str = "Inactive";
+
     let (aws_credentials, aws_config) = config::get_aws_config_files()?;
 
-    let parameters = config::read_automation_info(aws_config);
-    let _old_key = config::read_credentials_info(aws_credentials, &*parameters.aws_profile);
-
-    let mfa = get_answer("enter your mfa").await?;
+    let parameters = config::read_automation_info(&aws_config);
+    let old_key = config::read_credentials_info(&aws_credentials, &*parameters.aws_profile);
 
     let mut credentials_provider = connection::get_aws_credentials_provider(&*parameters.aws_profile, &*parameters.aws_mfa_arn);
+
+    let mfa = get_answer("enter your mfa").await?;
     credentials_provider.set_mfa_code(mfa);
 
-    let client = IamClient::new_with(HttpClient::new().unwrap(),
-                                     credentials_provider,
-                                     Region::default());
+    let iam_client = IamClient::new_with(HttpClient::new().unwrap(),
+                                         credentials_provider,
+                                         Region::default());
 
-    let result = client.list_access_keys(rusoto_iam::ListAccessKeysRequest {
+
+    let existing_keys = iam_client.list_access_keys(ListAccessKeysRequest {
         marker: None,
         max_items: None,
-        user_name: Option::Some(String::from(parameters.aws_username)),
-    }).await?;
+        user_name: Option::from(parameters.aws_username.clone()),
+    }).await?.access_key_metadata;
 
-    println!("{:?}", result);
+    for key in existing_keys {
+        let status = key.status.unwrap();
+        let key_id = key.access_key_id.expect("AccessKeyId");
+        println!("Found {} status {}", key_id, status);
+
+        if status == INACTIVE {
+            println!("Deleting {}", key_id);
+
+            let _delete_response = iam_client.delete_access_key(DeleteAccessKeyRequest {
+                access_key_id: key_id,
+                user_name: Option::from(parameters.aws_username.clone()),
+            });
+        }
+    };
+
+    println!("Creating new key");
+    let created_key = iam_client.create_access_key(
+        CreateAccessKeyRequest {
+            user_name: Option::from(parameters.aws_username.clone())
+        }
+    ).await?.access_key;
+
+    config::write_credentials_info(aws_credentials,
+                                   &*parameters.aws_profile,
+                                   created_key)?;
+
+    let old_key_id = old_key.unwrap().access_key_id;
+    println!("Disabling {}", old_key_id);
+
+    let _disable_response = iam_client.update_access_key(UpdateAccessKeyRequest {
+        access_key_id: old_key_id,
+        status: INACTIVE.to_string(),
+        user_name: Option::from(parameters.aws_username.clone()),
+    });
 
     Ok(())
 }

@@ -27,18 +27,29 @@ pub fn get_aws_config_files() -> Result<(Ini, Ini)> {
     Ok((credentials, config))
 }
 
-pub fn read_credentials_info(credentials_file: Ini, profile: &str) -> AccessKey {
+pub fn read_credentials_info(credentials_file: &Ini, profile: &str) -> Result<AccessKey> {
     let section = credentials_file.section(Some(profile)).unwrap();
-    AccessKey {
+    Ok(AccessKey {
         access_key_id: section.get("aws_access_key_id").unwrap().to_string(),
         secret_access_key: section.get("aws_secret_access_key").unwrap().to_string(),
         create_date: None,
         status: String::default(),
         user_name: String::default(),
-    }
+    })
 }
 
-pub fn read_automation_info(config_file: Ini) -> AutomationConfig {
+pub fn write_credentials_info(mut credentials_file: Ini, profile: &str, key: AccessKey) -> Result<()> {
+    let section = credentials_file.section_mut(Some(profile)).unwrap();
+
+    println!("Writing {}", key.access_key_id);
+
+    section.insert("aws_access_key_id", key.access_key_id);
+    section.insert("aws_secret_access_key", key.secret_access_key);
+    credentials_file.write_to_file(get_credentials_path()?.as_path())?;
+    Ok(())
+}
+
+pub fn read_automation_info(config_file: &Ini) -> AutomationConfig {
     let section = config_file.section(Some("automation")).unwrap();
     AutomationConfig {
         aws_profile: section.get("profile").unwrap().to_string(),

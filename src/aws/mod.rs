@@ -16,7 +16,7 @@ pub mod connection {
 
         StsSessionCredentialsProvider::new(sts_client,
                                            Option::None,
-                                           Option::from(String::from(aws_mfa_arn)),
+                                           Option::from(aws_mfa_arn.to_string()),
         )
     }
 }
