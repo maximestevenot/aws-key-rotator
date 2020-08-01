@@ -1,20 +1,14 @@
 use std::io::{stdin, stdout, Write};
-use std::path::PathBuf;
 
 use anyhow::{Context, Result};
-use dirs::home_dir;
 use inflector::Inflector;
-use ini::Ini;
-use rusoto_core::{Client, credential::ProfileProvider, Region};
+use rusoto_core::Region;
 use rusoto_core::request::HttpClient;
-use rusoto_iam::{AccessKey, CreateAccessKeyRequest, Iam, IamClient, ListAccessKeysError, ListAccessKeysResponse};
+use rusoto_iam::{Iam, IamClient};
 
-fn aws_credentials_file_path() -> PathBuf {
-    let mut filename = home_dir().unwrap();
-    filename.push(".aws");
-    filename.push("credentials");
-    filename
-}
+use crate::aws::{config, connection};
+
+mod aws;
 
 async fn get_answer(prompt: &str) -> Result<String> {
     print!("{}: ", prompt.to_title_case());
@@ -23,42 +17,29 @@ async fn get_answer(prompt: &str) -> Result<String> {
     let mut input = String::new();
     stdin().read_line(&mut input).context(format!("Error while reading: '{}'", prompt))?;
 
-    Ok(input)
-}
-
-fn get_aws_key_from_file(profile: &str) -> AccessKey {
-    let conf = Ini::load_from_file(aws_credentials_file_path().as_path()).unwrap();
-    let section = conf.section(Some(profile)).unwrap();
-    AccessKey {
-        access_key_id: String::from(section.get("aws_access_key_id").unwrap()),
-        secret_access_key: String::from(section.get("aws_secret_access_key").unwrap()),
-        create_date: None,
-        status: String::default(),
-        user_name: String::default(),
-    }
+    Ok(input.trim_end().to_string())
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
-    let aws_profile = "central";
-    let aws_username = "maxime.stevenot@soprabanking.com";
-    let _mfa = get_answer("mfa").await?;
+    let (aws_credentials, aws_config) = config::get_aws_config_files()?;
 
-    let _old_key = get_aws_key_from_file(aws_profile);
+    let parameters = config::read_automation_info(aws_config);
+    let _old_key = config::read_credentials_info(aws_credentials, &*parameters.aws_profile);
 
-    // let req = CreateAccessKeyRequest {
-    //     user_name: Option::Some(String::from(aws_username)),
-    // };
+    let mfa = get_answer("enter your mfa").await?;
 
-    let profile_provider = ProfileProvider::with_configuration(aws_credentials_file_path(), aws_profile);
+    let mut credentials_provider = connection::get_aws_credentials_provider(&*parameters.aws_profile, &*parameters.aws_mfa_arn);
+    credentials_provider.set_mfa_code(mfa);
+
     let client = IamClient::new_with(HttpClient::new().unwrap(),
-                                     profile_provider,
+                                     credentials_provider,
                                      Region::default());
 
     let result = client.list_access_keys(rusoto_iam::ListAccessKeysRequest {
         marker: None,
         max_items: None,
-        user_name: Option::Some(String::from(aws_username)),
+        user_name: Option::Some(String::from(parameters.aws_username)),
     }).await?;
 
     println!("{:?}", result);
