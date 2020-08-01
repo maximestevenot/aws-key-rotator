@@ -29,10 +29,12 @@ async fn main() -> Result<()> {
     let parameters = config::read_automation_info(&aws_config);
     let old_key = config::read_credentials_info(&aws_credentials, &*parameters.aws_profile);
 
-    let mut credentials_provider = connection::get_aws_credentials_provider(&*parameters.aws_profile, &*parameters.aws_mfa_arn);
-
     let mfa = get_answer("enter your mfa").await?;
-    credentials_provider.set_mfa_code(mfa);
+
+    let credentials_provider = connection::get_credentials_provider(&*parameters.aws_profile,
+                                                                    &*parameters.aws_mfa_arn,
+                                                                    &*mfa).await?;
+
 
     let iam_client = IamClient::new_with(HttpClient::new().unwrap(),
                                          credentials_provider,
