@@ -1,6 +1,5 @@
 use std::path::PathBuf;
 
-use anyhow::Result;
 use dirs::home_dir;
 use ini::Ini;
 use rusoto_iam::AccessKey;
@@ -12,59 +11,67 @@ pub struct AutomationConfig {
     pub aws_mfa_arn: String,
 }
 
-pub fn get_config_path() -> Result<PathBuf> {
-    get_dir_path().and_then(|it| push_and_return(it, "config"))
+pub fn get_aws_config_files() -> (Ini, Ini) {
+    let credentials = get_credentials_path()
+        .and_then(|it| Ini::load_from_file(it.as_path()).ok())
+        .expect("Error while reading credentials file");
+
+    let config = get_config_path()
+        .and_then(|it| Ini::load_from_file(it.as_path()).ok())
+        .expect("Error while reading config file");
+
+    (credentials, config)
 }
 
-pub fn get_credentials_path() -> Result<PathBuf> {
-    get_dir_path().and_then(|it| push_and_return(it, "credentials"))
+pub fn get_config_path() -> Option<PathBuf> {
+    get_dir_path().map(|it| it.join(PathBuf::from("config")))
 }
 
-pub fn get_aws_config_files() -> Result<(Ini, Ini)> {
-    let credentials = Ini::load_from_file(get_credentials_path()?.as_path())?;
-    let config = Ini::load_from_file(get_config_path()?.as_path())?;
-
-    Ok((credentials, config))
+pub fn get_credentials_path() -> Option<PathBuf> {
+    get_dir_path().map(|it| it.join(PathBuf::from("credentials")))
 }
 
-pub fn read_credentials_info(credentials_file: &Ini, profile: &str) -> Result<AccessKey> {
-    let section = credentials_file.section(Some(profile)).unwrap();
-    Ok(AccessKey {
-        access_key_id: section.get("aws_access_key_id").unwrap().to_string(),
-        secret_access_key: section.get("aws_secret_access_key").unwrap().to_string(),
+fn get_dir_path() -> Option<PathBuf> {
+    home_dir().map(|it| it.join(PathBuf::from(".aws")))
+}
+
+pub fn read_credentials_info(credentials_file: &Ini, profile: &str) -> AccessKey {
+    AccessKey {
+        access_key_id: read_property(credentials_file, profile, "aws_access_key_id"),
+        secret_access_key: read_property(credentials_file, profile, "aws_secret_access_key"),
         create_date: None,
         status: String::default(),
         user_name: String::default(),
-    })
-}
-
-pub fn write_credentials_info(mut credentials_file: Ini, profile: &str, key: AccessKey) -> Result<()> {
-    let section = credentials_file.section_mut(Some(profile)).unwrap();
-
-    println!("Writing {}", key.access_key_id);
-
-    section.insert("aws_access_key_id", key.access_key_id);
-    section.insert("aws_secret_access_key", key.secret_access_key);
-    credentials_file.write_to_file(get_credentials_path()?.as_path())?;
-    Ok(())
-}
-
-pub fn read_automation_info(config_file: &Ini) -> AutomationConfig {
-    let section = config_file.section(Some("automation")).unwrap();
-    AutomationConfig {
-        aws_profile: section.get("profile").unwrap().to_string(),
-        aws_username: section.get("username").unwrap().to_string(),
-        aws_mfa_arn: section.get("mfa_arn").unwrap().to_string(),
     }
 }
 
-fn get_dir_path() -> Result<PathBuf> {
-    let mut dir_path = home_dir().unwrap();
-    dir_path.push(".aws");
-    Ok(dir_path)
+pub fn write_credentials_info(credentials_file: &mut Ini, profile: &str, key: &AccessKey) {
+    println!("Writing {}", key.access_key_id);
+
+    let section = credentials_file.section_mut(Some(profile));
+    if let Some(it) = section {
+        it.insert("aws_access_key_id", key.access_key_id.clone());
+        it.insert("aws_secret_access_key", key.secret_access_key.clone())
+    }
+
+    get_credentials_path()
+        .and_then(|it| credentials_file.write_to_file(it.as_path()).ok())
+        .expect("Error while writing credentials file")
 }
 
-fn push_and_return(mut path_buf: PathBuf, path: &str) -> Result<PathBuf> {
-    path_buf.push(path);
-    Ok(path_buf)
+pub fn read_automation_info(config_file: &Ini) -> AutomationConfig {
+    let section = "automation";
+    AutomationConfig {
+        aws_profile: read_property(config_file, section, "profile"),
+        aws_username: read_property(config_file, section, "username"),
+        aws_mfa_arn: read_property(config_file, section, "mfa_arn"),
+    }
+}
+
+fn read_property(config_file: &Ini, section: &str, key: &str) -> String {
+    config_file
+        .section(Some(section))
+        .and_then(|it| it.get(key))
+        .map(|it| it.to_string())
+        .unwrap_or_else(|| panic!("Field '{}' is missing in section '{}'", section, key))
 }
