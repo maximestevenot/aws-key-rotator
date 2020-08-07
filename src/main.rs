@@ -3,14 +3,14 @@ use std::io::{stdin, stdout, Write};
 use anyhow::{Context, Result};
 use inflector::Inflector;
 use rusoto_core::credential::AutoRefreshingProvider;
-use rusoto_core::request::HttpClient;
 use rusoto_core::Region;
+use rusoto_core::request::HttpClient;
 use rusoto_iam::{
     CreateAccessKeyRequest, DeleteAccessKeyRequest, Iam, IamClient, ListAccessKeysRequest,
     UpdateAccessKeyRequest,
 };
 
-use crate::aws::{config, connection};
+use crate::aws::{config, connection::CredentialsProviderFactory};
 
 mod aws;
 
@@ -37,7 +37,7 @@ async fn main() -> Result<()> {
 
     let mfa = get_answer("enter your mfa")?;
 
-    let credentials_provider = connection::get_sts_credentials_provider(
+    let credentials_provider = CredentialsProviderFactory::get_sts_credentials_provider(
         parameters.aws_profile.as_ref(),
         parameters.aws_mfa_arn.as_ref(),
         mfa.as_ref(),
