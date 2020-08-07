@@ -10,7 +10,8 @@ use rusoto_iam::{
     UpdateAccessKeyRequest,
 };
 
-use crate::aws::{config, connection::CredentialsProviderFactory};
+use crate::aws::config::AwsConfigurationManager;
+use crate::aws::connection::CredentialsProviderFactory;
 
 mod aws;
 
@@ -30,16 +31,15 @@ fn get_answer(prompt: &str) -> Result<String> {
 async fn main() -> Result<()> {
     const INACTIVE: &str = "Inactive";
 
-    let (mut aws_credentials, aws_config) = config::get_aws_config_files();
+    let mut config_manager = AwsConfigurationManager::new();
 
-    let parameters = config::read_automation_info(&aws_config);
-    let old_key = config::read_credentials_info(&aws_credentials, parameters.aws_profile.as_ref());
+    let old_key = config_manager.read_credentials_info();
 
     let mfa = get_answer("enter your mfa")?;
 
     let credentials_provider = CredentialsProviderFactory::get_sts_credentials_provider(
-        parameters.aws_profile.as_ref(),
-        parameters.aws_mfa_arn.as_ref(),
+        config_manager.aws_profile.as_ref(),
+        config_manager.aws_mfa_arn.as_ref(),
         mfa.as_ref(),
     )?;
 
@@ -55,7 +55,7 @@ async fn main() -> Result<()> {
         .list_access_keys(ListAccessKeysRequest {
             marker: None,
             max_items: None,
-            user_name: Some(parameters.aws_username.clone()),
+            user_name: Some(config_manager.aws_username.clone()),
         })
         .await?
         .access_key_metadata;
@@ -70,7 +70,7 @@ async fn main() -> Result<()> {
 
             let _delete_response = iam_client.delete_access_key(DeleteAccessKeyRequest {
                 access_key_id: key_id,
-                user_name: Some(parameters.aws_username.clone()),
+                user_name: Some(config_manager.aws_username.clone()),
             });
         }
     }
@@ -78,16 +78,12 @@ async fn main() -> Result<()> {
     println!("Creating new key");
     let created_key = iam_client
         .create_access_key(CreateAccessKeyRequest {
-            user_name: Option::from(parameters.aws_username.clone()),
+            user_name: Option::from(config_manager.aws_username.clone()),
         })
         .await?
         .access_key;
 
-    config::write_credentials_info(
-        &mut aws_credentials,
-        parameters.aws_profile.as_ref(),
-        &created_key,
-    );
+    config_manager.write_credentials_info(&created_key);
 
     let old_key_id = old_key.access_key_id;
     println!("Disabling {}", old_key_id);
@@ -95,7 +91,7 @@ async fn main() -> Result<()> {
     let _disable_response = iam_client.update_access_key(UpdateAccessKeyRequest {
         access_key_id: old_key_id,
         status: INACTIVE.to_string(),
-        user_name: Some(parameters.aws_username.clone()),
+        user_name: Some(config_manager.aws_username.clone()),
     });
 
     Ok(())

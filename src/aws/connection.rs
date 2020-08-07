@@ -1,9 +1,9 @@
 use anyhow::Result;
-use rusoto_core::{HttpClient, Region};
 use rusoto_core::credential::ProfileProvider;
+use rusoto_core::{HttpClient, Region};
 use rusoto_sts::{StsClient, StsSessionCredentialsProvider};
 
-use crate::aws::config::get_credentials_path;
+use crate::aws::config::AwsConfigurationManager;
 
 pub struct CredentialsProviderFactory;
 
@@ -13,8 +13,10 @@ impl CredentialsProviderFactory {
         mfa_arn: &str,
         mfa_code: &str,
     ) -> Result<StsSessionCredentialsProvider> {
-        let profile_provider =
-            ProfileProvider::with_configuration(get_credentials_path().unwrap(), profile);
+        let profile_provider = ProfileProvider::with_configuration(
+            AwsConfigurationManager::get_credentials_path().unwrap(),
+            profile,
+        );
 
         let sts_client = StsClient::new_with(
             HttpClient::new().unwrap(),
