@@ -64,7 +64,9 @@ impl AwsConfigurationManager {
     pub fn write_credentials_info(&mut self, key: &AccessKey) {
         println!("Writing {}", key.access_key_id);
 
-        let section = self.credentials_file.section_mut(Some(self.aws_profile.as_str()));
+        let section = self
+            .credentials_file
+            .section_mut(Some(self.aws_profile.as_str()));
         if let Some(it) = section {
             it.insert("aws_access_key_id", key.access_key_id.clone());
             it.insert("aws_secret_access_key", key.secret_access_key.clone())
