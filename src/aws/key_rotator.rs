@@ -1,4 +1,4 @@
-use anyhow::Result;
+use anyhow::{Context, Result};
 use rusoto_core::credential::AutoRefreshingProvider;
 use rusoto_core::{HttpClient, Region};
 use rusoto_iam::{
@@ -47,7 +47,7 @@ impl AwsKeyRotator {
 
         let existing_keys = self.get_existing_keys().await.unwrap_or(Vec::default());
 
-        self.delete_inactive_keys(existing_keys);
+        self.delete_inactive_keys(existing_keys).await;
 
         let created_key = self
             .create_new_key()
@@ -56,7 +56,7 @@ impl AwsKeyRotator {
 
         self.config_manager.write_credentials_info(&created_key);
 
-        self.disable_old_key(&old_key);
+        self.disable_old_key(&old_key).await;
     }
 
     async fn get_existing_keys(&self) -> Result<Vec<AccessKeyMetadata>> {
@@ -72,7 +72,7 @@ impl AwsKeyRotator {
         Ok(existing_keys)
     }
 
-    fn delete_inactive_keys(&self, existing_keys: Vec<AccessKeyMetadata>) {
+    async fn delete_inactive_keys(&self, existing_keys: Vec<AccessKeyMetadata>) {
         for key in existing_keys {
             let status = key.status.unwrap();
             let key_id = key.access_key_id.expect("AccessKeyId");
@@ -81,10 +81,14 @@ impl AwsKeyRotator {
             if status == INACTIVE {
                 println!("Deleting {}", key_id);
 
-                let _delete_response = self.iam_client.delete_access_key(DeleteAccessKeyRequest {
-                    access_key_id: key_id,
-                    user_name: Some(self.config_manager.aws_username.clone()),
-                });
+                let _delete_response = self
+                    .iam_client
+                    .delete_access_key(DeleteAccessKeyRequest {
+                        access_key_id: key_id,
+                        user_name: Some(self.config_manager.aws_username.clone()),
+                    })
+                    .await
+                    .context(format!("Error while deleting {} key", status));
             }
         }
     }
@@ -101,14 +105,18 @@ impl AwsKeyRotator {
         Ok(created_key)
     }
 
-    fn disable_old_key(&self, old_key: &AccessKey) {
+    async fn disable_old_key(&self, old_key: &AccessKey) {
         let old_key_id = old_key.access_key_id.clone();
         println!("Disabling {}", old_key_id);
 
-        let _disable_response = self.iam_client.update_access_key(UpdateAccessKeyRequest {
-            access_key_id: old_key_id,
-            status: INACTIVE.to_string(),
-            user_name: Some(self.config_manager.aws_username.clone()),
-        });
+        let _disable_response = self
+            .iam_client
+            .update_access_key(UpdateAccessKeyRequest {
+                access_key_id: old_key_id,
+                status: INACTIVE.to_string(),
+                user_name: Some(self.config_manager.aws_username.clone()),
+            })
+            .await
+            .context("Error while disabling old key");
     }
 }
