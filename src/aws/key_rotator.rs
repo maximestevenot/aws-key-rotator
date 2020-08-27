@@ -17,7 +17,7 @@ pub struct AwsKeyRotator {
 }
 
 impl AwsKeyRotator {
-    pub fn new(mfa_code: &str) -> Self {
+    pub fn new(mfa_code: &str) -> Result<Self> {
         let config_manager = AwsConfigurationManager::new();
 
         let credentials_provider = CredentialsProviderFactory::get_sts_credentials_provider(
@@ -31,15 +31,15 @@ impl AwsKeyRotator {
             .expect("Error while getting Auto Refreshing Provider");
 
         let iam_client = IamClient::new_with(
-            HttpClient::new().unwrap(),
+            HttpClient::new()?,
             credentials_provider,
             Region::default(),
         );
 
-        Self {
+        Ok(Self {
             config_manager,
             iam_client,
-        }
+        })
     }
 
     pub async fn process(&mut self) {
@@ -72,9 +72,9 @@ impl AwsKeyRotator {
         Ok(existing_keys)
     }
 
-    async fn delete_inactive_keys(&self, existing_keys: Vec<AccessKeyMetadata>) {
+    async fn delete_inactive_keys(&self, existing_keys: Vec<AccessKeyMetadata>) -> Option<()> {
         for key in existing_keys {
-            let status = key.status.unwrap();
+            let status = key.status?;
             let key_id = key.access_key_id.expect("AccessKeyId");
             println!("Found {} status {}", key_id, status);
 
@@ -91,6 +91,7 @@ impl AwsKeyRotator {
                     .context(format!("Error while deleting {} key", status));
             }
         }
+        Some(())
     }
 
     async fn create_new_key(&self) -> Result<AccessKey> {
