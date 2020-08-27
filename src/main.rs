@@ -31,7 +31,7 @@ async fn main() -> Result<()> {
     let mfa = get_answer("enter your mfa")?;
 
     let mut aws_key_rotator = AwsKeyRotator::new(&mfa.to_string())?;
-    aws_key_rotator.process().await;
+    aws_key_rotator.process().await?;
 
     Ok(())
 }
