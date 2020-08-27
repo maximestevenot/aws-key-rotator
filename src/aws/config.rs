@@ -68,8 +68,8 @@ impl AwsConfigurationManager {
             .credentials_file
             .section_mut(Some(self.aws_profile.as_str()));
         if let Some(it) = section {
-            it.insert("aws_access_key_id", key.access_key_id.clone());
-            it.insert("aws_secret_access_key", key.secret_access_key.clone())
+            it.insert("aws_access_key_id", &key.access_key_id);
+            it.insert("aws_secret_access_key", &key.secret_access_key)
         }
 
         Self::get_credentials_path()
