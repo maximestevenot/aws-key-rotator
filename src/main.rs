@@ -12,10 +12,9 @@ fn get_answer(prompt: &str) -> Result<u32> {
     let _r = stdout().flush();
 
     let mut input = String::new();
-    stdin()
-        .read_line(&mut input)
+    stdin().read_line(&mut input)
         .context(format!("Error while reading: '{}'", prompt))?;
-        check_answer(input)
+    check_answer(input)
 }
 
 fn check_answer(answer: String) -> Result<u32> {
