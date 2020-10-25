@@ -17,46 +17,43 @@ pub struct AwsKeyRotator {
 }
 
 impl AwsKeyRotator {
-    pub fn new(mfa_code: &str) -> Self {
+    pub fn new(mfa_code: &str) -> Result<Self> {
         let config_manager = AwsConfigurationManager::new();
 
         let credentials_provider = CredentialsProviderFactory::get_sts_credentials_provider(
             config_manager.aws_profile.as_ref(),
             config_manager.aws_mfa_arn.as_ref(),
             mfa_code.as_ref(),
-        )
-        .expect("Error while getting STS Credentials Provider");
+        )?;
 
-        let credentials_provider = AutoRefreshingProvider::new(credentials_provider)
-            .expect("Error while getting Auto Refreshing Provider");
+        let credentials_provider = AutoRefreshingProvider::new(credentials_provider)?;
 
         let iam_client = IamClient::new_with(
-            HttpClient::new().unwrap(),
+            HttpClient::new()?,
             credentials_provider,
             Region::default(),
         );
 
-        Self {
+        Ok(Self {
             config_manager,
             iam_client,
-        }
+        })
     }
 
-    pub async fn process(&mut self) {
+    pub async fn process(&mut self) -> Result<()> {
         let old_key = self.config_manager.read_credentials_info();
 
         let existing_keys = self.get_existing_keys().await.unwrap_or(Vec::default());
 
         self.delete_inactive_keys(existing_keys).await;
 
-        let created_key = self
+        let created_key: AccessKey = self
             .create_new_key()
-            .await
-            .expect("Error while creating new key");
+            .await?;
 
         self.config_manager.write_credentials_info(&created_key);
-
-        self.disable_old_key(&old_key).await;
+        self.disable_old_key(&old_key).await?;
+        Ok(())
     }
 
     async fn get_existing_keys(&self) -> Result<Vec<AccessKeyMetadata>> {
@@ -72,10 +69,10 @@ impl AwsKeyRotator {
         Ok(existing_keys)
     }
 
-    async fn delete_inactive_keys(&self, existing_keys: Vec<AccessKeyMetadata>) {
+    async fn delete_inactive_keys(&self, existing_keys: Vec<AccessKeyMetadata>) -> Option<()> {
         for key in existing_keys {
-            let status = key.status.unwrap();
-            let key_id = key.access_key_id.expect("AccessKeyId");
+            let status = key.status?;
+            let key_id = key.access_key_id?;
             println!("Found {} status {}", key_id, status);
 
             if status == INACTIVE {
@@ -91,6 +88,7 @@ impl AwsKeyRotator {
                     .context(format!("Error while deleting {} key", status));
             }
         }
+        Some(())
     }
 
     async fn create_new_key(&self) -> Result<AccessKey> {
@@ -105,7 +103,7 @@ impl AwsKeyRotator {
         Ok(created_key)
     }
 
-    async fn disable_old_key(&self, old_key: &AccessKey) {
+    async fn disable_old_key(&self, old_key: &AccessKey) -> Result<()> {
         let old_key_id = old_key.access_key_id.clone();
         println!("Disabling {}", old_key_id);
 
@@ -116,7 +114,7 @@ impl AwsKeyRotator {
                 status: INACTIVE.to_string(),
                 user_name: Some(self.config_manager.aws_username.clone()),
             })
-            .await
-            .context("Error while disabling old key");
+            .await?;
+        Ok(())
     }
 }

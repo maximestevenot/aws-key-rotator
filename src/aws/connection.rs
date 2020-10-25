@@ -13,13 +13,18 @@ impl CredentialsProviderFactory {
         mfa_arn: &str,
         mfa_code: &str,
     ) -> Result<StsSessionCredentialsProvider> {
-        let profile_provider = ProfileProvider::with_configuration(
-            AwsConfigurationManager::get_credentials_path().unwrap(),
-            profile,
-        );
+
+        let mut profile_provider = ProfileProvider::new()?;
+        if let Some(credentials) = AwsConfigurationManager::get_credentials_path() {
+            profile_provider = ProfileProvider::with_configuration(
+                credentials,
+                profile,
+            );
+        }
+        
 
         let sts_client = StsClient::new_with(
-            HttpClient::new().unwrap(),
+            HttpClient::new()?,
             profile_provider,
             Region::default(),
         );
