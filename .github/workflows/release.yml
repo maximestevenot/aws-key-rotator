@@ -1,0 +1,67 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - v*
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  make-binary:
+    env:
+      BINARY_NAME: aws-key-rotator
+    strategy:
+      matrix:
+        os: [ macos-latest, windows-latest, ubuntu-latest ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v2
+      - uses: Swatinem/rust-cache@v1
+      - name: cargo/build
+        run: cargo build --release
+      - uses: actions/upload-artifact@v2
+        with:
+          name: ${{ format('{0}-{1}-{2}', env.BINARY_NAME, matrix.os, github.sha) }}
+          path: target/release/${{ env.BINARY_NAME }}*
+
+#  create-release:
+#    runs-on: ubuntu-latest
+#    needs: [make-binary]
+#    steps:
+#      - name: release/create
+#        id: create_release
+#        uses: actions/create-release@v1
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#        with:
+#          tag_name: ${{ github.ref }}
+#          release_name: ${{ github.ref }}
+#          body: "Lorem ipsum"
+#          draft: false
+#          prerelease: false
+#  upload-assets:
+#    env:
+#      BINARY_NAME: aws-key-rotator
+#    strategy:
+#      matrix:
+#        os: [ macos-latest,windows-latest,ubuntu-latest ]
+#    runs-on: ubuntu-latest
+#    needs: [create-release]
+#    steps:
+#      - uses: actions/download-artifact@v2
+#        with:
+#          name: ${{ format('{0}-{1}-{2}', env.BINARY_NAME, matrix.os, github.sha) }}
+#      - name: ls
+#        run: ls -la -R
+#      - name: release/upload-asset
+#        id: upload_release_asset
+#        uses: actions/upload-release-asset@v1
+#        env:
+#          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#        with:
+#          upload_url: ${{ jobs.create-release.steps.create_release.outputs.upload_url }} # This pulls from the CREATE RELEASE step above, referencing it's ID to get its outputs object, which include a `upload_url`. See this blog post for more info: https://jasonet.co/posts/new-features-of-github-actions/#passing-data-to-future-steps
+#          asset_path: ${{ format('{0}-{1}-{2}', env.BINARY_NAME, matrix.os, github.sha) }}.zip
+#          asset_name: ${{ format('{0}-{1}-{2}', env.BINARY_NAME, matrix.os, github.sha) }}.zip
+#          asset_content_type: application/zip
