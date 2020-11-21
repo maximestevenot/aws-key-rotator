@@ -1,7 +1,7 @@
+use anyhow::{anyhow, Context, Result};
+use inflector::Inflector;
 use std::io::{stdin, stdout, Write};
 use std::str::FromStr;
-use anyhow::{Context, Result, anyhow};
-use inflector::Inflector;
 
 use crate::aws::key_rotator::AwsKeyRotator;
 
@@ -12,7 +12,8 @@ fn get_answer(prompt: &str) -> Result<u32> {
     let _r = stdout().flush();
 
     let mut input = String::new();
-    stdin().read_line(&mut input)
+    stdin()
+        .read_line(&mut input)
         .context(format!("Error while reading: '{}'", prompt))?;
     check_answer(input)
 }
@@ -35,7 +36,6 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-
 
 #[cfg(test)]
 mod aws_key_rotator_tests {

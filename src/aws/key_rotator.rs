@@ -23,16 +23,13 @@ impl AwsKeyRotator {
         let credentials_provider = CredentialsProviderFactory::get_sts_credentials_provider(
             config_manager.aws_profile.as_ref(),
             config_manager.aws_mfa_arn.as_ref(),
-            mfa_code.as_ref(),
+            mfa_code,
         )?;
 
         let credentials_provider = AutoRefreshingProvider::new(credentials_provider)?;
 
-        let iam_client = IamClient::new_with(
-            HttpClient::new()?,
-            credentials_provider,
-            Region::default(),
-        );
+        let iam_client =
+            IamClient::new_with(HttpClient::new()?, credentials_provider, Region::default());
 
         Ok(Self {
             config_manager,
@@ -43,13 +40,11 @@ impl AwsKeyRotator {
     pub async fn process(&mut self) -> Result<()> {
         let old_key = self.config_manager.read_credentials_info();
 
-        let existing_keys = self.get_existing_keys().await.unwrap_or(Vec::default());
+        let existing_keys = self.get_existing_keys().await.unwrap_or_default();
 
         self.delete_inactive_keys(existing_keys).await;
 
-        let created_key: AccessKey = self
-            .create_new_key()
-            .await?;
+        let created_key: AccessKey = self.create_new_key().await?;
 
         self.config_manager.write_credentials_info(&created_key);
         self.disable_old_key(&old_key).await?;
