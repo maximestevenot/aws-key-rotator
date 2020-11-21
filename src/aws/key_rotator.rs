@@ -1,10 +1,11 @@
 use anyhow::{Context, Result};
-use rusoto_core::credential::AutoRefreshingProvider;
 use rusoto_core::{HttpClient, Region};
+use rusoto_core::credential::AutoRefreshingProvider;
 use rusoto_iam::{
     AccessKey, AccessKeyMetadata, CreateAccessKeyRequest, DeleteAccessKeyRequest, Iam, IamClient,
     ListAccessKeysRequest, UpdateAccessKeyRequest,
 };
+use tokio_compat_02::FutureExt;
 
 use crate::aws::config::AwsConfigurationManager;
 use crate::aws::connection::CredentialsProviderFactory;
@@ -59,6 +60,7 @@ impl AwsKeyRotator {
                 max_items: None,
                 user_name: Some(self.config_manager.aws_username.clone()),
             })
+            .compat()
             .await?
             .access_key_metadata;
         Ok(existing_keys)
@@ -79,6 +81,7 @@ impl AwsKeyRotator {
                         access_key_id: key_id,
                         user_name: Some(self.config_manager.aws_username.clone()),
                     })
+                    .compat()
                     .await
                     .context(format!("Error while deleting {} key", status));
             }
@@ -93,6 +96,7 @@ impl AwsKeyRotator {
             .create_access_key(CreateAccessKeyRequest {
                 user_name: Some(self.config_manager.aws_username.clone()),
             })
+            .compat()
             .await?
             .access_key;
         Ok(created_key)
@@ -109,6 +113,7 @@ impl AwsKeyRotator {
                 status: INACTIVE.to_string(),
                 user_name: Some(self.config_manager.aws_username.clone()),
             })
+            .compat()
             .await?;
         Ok(())
     }
