@@ -8,7 +8,7 @@ tokio = { version = "0.3", features = ["macros", "rt-multi-thread"] }
 tokio-compat-02 = "0.1"
 rust-ini = "0.16"
 dirs = "3.0"
-rusoto_iam = "0.45"
+rusoto_iam = "0.46"
 rusoto_core = "0.45"
 rusoto_sts = "0.45"
 thiserror = "1.0"
