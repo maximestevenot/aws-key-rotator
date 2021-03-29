@@ -6,7 +6,7 @@ edition = "2018"
 [dependencies]
 tokio = { version = "0.3", features = ["macros", "rt-multi-thread"] }
 tokio-compat-02 = "0.1"
-rust-ini = "0.16"
+rust-ini = "0.17"
 dirs = "3.0"
 rusoto_iam = "0.45"
 rusoto_core = "0.45"
