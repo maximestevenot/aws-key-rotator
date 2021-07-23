@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2018"
 
 [dependencies]
-tokio = { version = "0.3", features = ["macros", "rt-multi-thread"] }
+tokio = { version = "1.9", features = ["macros", "rt-multi-thread"] }
 tokio-compat-02 = "0.1"
 rust-ini = "0.16"
 dirs = "3.0"
